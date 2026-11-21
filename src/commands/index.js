@@ -1,6 +1,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { groupAction } = require("../lib/group");
 
 const PREFIX = process.env.PREFIX || ".";
 const BOT_NAME = "TOYINMDBOT";
@@ -34,37 +35,27 @@ async function handleCommand(sock, msg) {
   const reply = message =>
     sock.sendMessage(chat, { text: message }, { quoted: msg });
 
-  if (cmd === "menu" || cmd === "help") {
+  if (["menu", "help"].includes(cmd)) {
     const caption = `╭━━━〔 ${BOT_NAME} 〕
-┃
 ┃ Prefix: ${PREFIX}
 ┃ Mode: ${mode.toUpperCase()}
-┃
 ┣━━ GENERAL
 ┃ .menu
 ┃ .ping
 ┃ .alive
 ┃ .owner
-┃
 ┣━━ GROUP
-┃ .kick
-┃ .promote
-┃ .demote
+┃ .kick @user
+┃ .promote @user
+┃ .demote @user
 ┃ .tagall
 ┃ .hidetag
-┃
 ┣━━ OWNER
 ┃ .mode public
 ┃ .mode private
-┃
 ╰━━━━━━━━━━━━━━`;
 
-    const imagePath = path.join(
-      process.cwd(),
-      "public",
-      "assets",
-      "menu.jpg"
-    );
+    const imagePath = path.join(process.cwd(), "public", "assets", "menu.jpg");
 
     if (fs.existsSync(imagePath)) {
       return sock.sendMessage(chat, {
@@ -76,23 +67,14 @@ async function handleCommand(sock, msg) {
     return reply(caption);
   }
 
-  if (cmd === "ping") {
-    return reply("🏓 Pong! TOYINMDBOT is online.");
-  }
-
-  if (cmd === "alive") {
-    return reply("✅ TOYINMDBOT is alive and running.");
-  }
-
-  if (cmd === "owner") {
-    return reply(`Bot owner: ${owner || "Not configured"}`);
-  }
+  if (cmd === "ping") return reply("🏓 Pong! TOYINMDBOT is online.");
+  if (cmd === "alive") return reply("✅ TOYINMDBOT is alive.");
+  if (cmd === "owner") return reply(`Bot owner: ${owner || "Not configured"}`);
 
   if (cmd === "mode") {
     if (!isOwner) return reply("Only the owner can change bot mode.");
 
     const selected = (args[0] || "").toLowerCase();
-
     if (!["public", "private"].includes(selected)) {
       return reply("Use .mode public or .mode private");
     }
@@ -100,6 +82,32 @@ async function handleCommand(sock, msg) {
     mode = selected;
     return reply(`Bot mode changed to ${mode}.`);
   }
+
+  if (["kick", "promote", "demote"].includes(cmd)) {
+    try {
+      const mentions =
+        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+
+      await groupAction(sock, chat, sender, cmd, mentions);
+      return reply(`Successfully executed ${cmd}.`);
+    } catch (error) {
+      return reply(error.message);
+    }
+  }
+
+  if (["tagall", "hidetag"].includes(cmd)) {
+    if (!chat.endsWith("@g.us")) return reply("Group command only.");
+
+    const metadata = await sock.groupMetadata(chat);
+    const mentions = metadata.participants.map(p => p.id);
+
+    return sock.sendMessage(chat, {
+      text: args.join(" ") || "Attention everyone!",
+      mentions
+    }, { quoted: msg });
+  }
+
+  return reply(`Unknown command. Type ${PREFIX}menu.`);
 }
 
 module.exports = { handleCommand };
