@@ -1,17 +1,25 @@
 
 const { handleCommand } = require("../commands");
+const {
+  handleAntiDelete,
+  handleDeletedMessage
+} = require("./antidelete");
 
 function registerMessageHandler(sock) {
-  sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify") return;
-
+  sock.ev.on("messages.upsert", async ({ messages }) => {
     for (const msg of messages) {
-      if (!msg.message || msg.key.fromMe) continue;
-
       try {
+        if (msg.message?.protocolMessage?.type === 0) {
+          await handleDeletedMessage(sock, msg);
+          continue;
+        }
+
+        if (!msg.message) continue;
+
+        await handleAntiDelete(sock, msg);
         await handleCommand(sock, msg);
       } catch (error) {
-        console.error("Message error:", error.message);
+        console.error("Message handler error:", error);
       }
     }
   });
